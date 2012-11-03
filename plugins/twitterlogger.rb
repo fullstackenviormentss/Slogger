@@ -73,7 +73,8 @@ class TwitterLogger < Slogger
       REXML::Document.new(res).elements.each("statuses/status") { |tweet|
         today = @timespan
         tweet_date = Time.parse(tweet.elements['created_at'].text)
-        break if tweet_date < today
+        @log.warn(tweet_date)
+        # break if tweet_date < today
         tweet_text = tweet.elements['text'].text.gsub(/\n/,"\n\t")
         if type == 'favorites'
           # TODO: Prepend favorite's username/link
@@ -116,9 +117,8 @@ class TwitterLogger < Slogger
             #   # final_url = self.get_body(picurl[0]).match(/"(https:\/\/s3.amazonaws.com\/files.droplr.com\/.+?)"/)
             #   tweet_images << { 'content' => tweet_text, 'date' => tweet_date.utc.iso8601, 'url' => picurl[0]+"+" } # unless final_url.nil?
             # end
-
-            tweet_text.scan(/\((http:\/\/instagr\.am\/\w\/.+?\/)\)/).each do |picurl|
-              final_url=self.get_body(picurl[0]).match(/http:\/\/distilleryimage.*?\.com\/[a-z0-9_]+\.jpg/)
+            tweet_text.scan(/\((http:\/\/instagr\.am\/\w\/\w+?\/)\)/).each do |picurl|
+              final_url=self.get_body(picurl[0]).match(/http:\/\/distilleryimage.....[a-z]+.com[\W][a-z0-9_]+.jpg/)
               tweet_images << { 'content' => tweet_text, 'date' => tweet_date.utc.iso8601, 'url' => final_url[0] } unless final_url.nil?
             end
             tweet_text.scan(/http:\/\/[\w\.]*yfrog\.com\/[\w]+/).each do |picurl|
@@ -140,18 +140,18 @@ class TwitterLogger < Slogger
         end
       }
       if @twitter_config['save_images'] && images != []
-        begin
+        #begin
           self.download_images(images)
-        rescue Exception => e
-          @log.warn("Failure downloading images")
+        # rescue Exception => e
+        #  @log.warn("Failure downloading images")
           # p e
-        end
+        #end
       end
       return tweets.reverse.join("\n")
-    rescue Exception => e
-      @log.warn("Error getting #{type} for #{user}")
+    #rescue Exception => e
+    #  @log.warn("Error getting #{type} for #{user}")
       # p e
-      return false
+    #  return false
     end
 
   end

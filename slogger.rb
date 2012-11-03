@@ -38,10 +38,6 @@ class String
     self.to_s.gsub(/(?=[^a-zA-Z0-9_.\/\-\n])/, '\\').gsub(/\n/, "'\n'").sub(/^$/, "''")
   end
 
-  def e_link
-    self.to_s.gsub(/([\[\]\(\)])/, '\\\\\1')
-  end
-
 end
 
 class Slogger
@@ -121,26 +117,26 @@ class Slogger
   end
 
   def storage_path
-  	if @config.key?('storage')
-	    if @config['storage'].downcase == 'icloud'
-	      dayonedir = %x{ls ~/Library/Mobile\\ Documents/|grep dayoneapp}.strip
-	      full_path = File.expand_path("~/Library/Mobile\ Documents/#{dayonedir}/Documents/Journal_dayone/")
-	      if File.exists?(full_path)
-	        return full_path
-	      else
-	        raise "Failed to find iCloud storage path"
-	        Process.exit(-1)
-	      end
-	    elsif File.exists?(File.expand_path(@config['storage']))
-	      return File.expand_path(@config['storage'])
-	    else
+    if @config.key?('storage')
+      if @config['storage'].downcase == 'icloud'
+        dayonedir = %x{ls ~/Library/Mobile\\ Documents/|grep dayoneapp}.strip
+        full_path = File.expand_path("~/Library/Mobile\ Documents/#{dayonedir}/Documents/Journal_dayone/")
+        if File.exists?(full_path)
+          return full_path
+        else
+          raise "Failed to find iCloud storage path"
+          Process.exit(-1)
+        end
+      elsif File.exists?(File.expand_path(@config['storage']))
+        return File.expand_path(@config['storage'])
+      else
         raise "Path for Day One journal is not specified or doesn't exist. Change your path in slogger_config and run ./slogger again: #{@config['storage']}"
-	      Process.exit(-1)
-	    end
-	else
-	  raise "Path for Day One journal is not specified or doesn't exist. Change your path in slogger_config and run ./slogger again: #{@config['storage']}"
-	  return
-	end
+        Process.exit(-1)
+      end
+  else
+    raise "Path for Day One journal is not specified or doesn't exist. Change your path in slogger_config and run ./slogger again: #{@config['storage']}"
+    return
+  end
   end
 
   def run_plugins

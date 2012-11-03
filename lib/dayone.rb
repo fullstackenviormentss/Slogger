@@ -5,7 +5,7 @@ class DayOne < Slogger
     content = options['content'] || ''
     unless markdown
       uuid = options['uuid'] || %x{uuidgen}.gsub(/-/,'').strip
-      datestamp = options['datestamp'] || Time.now.utc.iso8601
+      datestamp = options['datestamp'] || options['date'] || Time.now.utc.iso8601
       entry = CGI.escapeHTML(content) unless content.nil?
     else
       img_path = false
@@ -20,11 +20,12 @@ class DayOne < Slogger
         entry = "![](#{img_path})\n\n" + entry
       end
       uuid = Time.now.strftime('%Y-%m-%d_%I%M%S')+"_"+(rand(5000).to_s)
-      if options['datestamp']
-        datestamp = Date.parse(options['datestamp']).strftime('%x')
+      if date = options['datestamp'] || options['date']
+        datestamp = Date.parse(date).strftime('%x')
       else
         datestamp = Time.now.strftime('%x')
       end
+      puts datestamp.inspect
     end
     starred = options['starred'] || false
 
@@ -47,7 +48,8 @@ class DayOne < Slogger
     match = source.match(/(\..{3,4})($|\?|%22)/)
     ext = match.nil? ? match[1] : '.jpg'
     @log.info("Original image has extension #{ext}. Coverting for Day One recognition.")
-    target = @dayonepath + "/photos/#{uuid}.jpg"
+    target = File.join(File.expand_path(@dayonepath),"photos","#{uuid}.jpg")
+    FileUtils.mkdir_p(File.dirname(target))
     begin
       Net::HTTP.get_response(URI.parse(imageurl)) do |http|
         data = http.body
@@ -56,13 +58,13 @@ class DayOne < Slogger
           @log.warn("Download failed")
           return false
         else
-          open( File.expand_path(target), "wb" ) { |file| file.write(data) }
+          File.open( File.expand_path(target), "wb" ) { |file| file.write(data) }
         end
       end
       return target
-    rescue Exception => e
-      p e
-      return false
+    #rescue Exception => e
+    #  p e
+    #  raise e
     end
   end
 
@@ -100,7 +102,6 @@ class DayOne < Slogger
   end
 
   def store_single_photo(file, options = {}, copy = false)
-
     options['content'] ||= File.basename(file,'.jpg') if @config['image_filename_is_title']
     options['uuid'] ||= %x{uuidgen}.gsub(/-/,'').strip
     options['starred'] ||= false
