@@ -247,6 +247,10 @@ optparse = OptionParser.new do|opts|
   opts.on( '-u', '--undo COUNT', 'Undo the last COUNT runs') do |count|
     $options[:undo] = count.to_i
   end
+  $options[:archive] = false
+  opts.on( '-a', '--archive', 'Get data as far back as possible to fill out an archive') do |count|
+    $options[:archive] = true
+  end
   opts.on( '-v', '--version', 'Display the version number') do
     $stdout.puts("Slogger version #{MAJOR_VERSION}.#{MINOR_VERSION}.#{BUILD_NUMBER}")
     exit

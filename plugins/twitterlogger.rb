@@ -1,3 +1,4 @@
+# encoding: UTF-8
 =begin
 Plugin: Twitter Logger
 Description: Logs updates and favorites for specified Twitter users
@@ -71,7 +72,7 @@ class TwitterLogger < Slogger
         tweet_text = tweet.elements['text'].text.gsub(/\n/,"\n\t")
         if type == 'favorites'
           screen_name = tweet.elements['user/screen_name'].text
-          tweet_text = "*favorite* [#{screen_name}](http://twitter.com/#{screen_name}): #{tweet_text}"
+          tweet_text = "☆  #{tweet_text}\n[#{screen_name}](http://twitter.com/#{screen_name})"
         end
         tweet_id = tweet.elements['id'].text
         unless tweet.elements['entities/urls'].nil? || tweet.elements['entities/urls'].length == 0
@@ -94,23 +95,26 @@ class TwitterLogger < Slogger
         end
         if tweet_images.empty?
           tweets.push({
-            'content' => "* [[#{tweet_date.strftime('%I:%M %p')}](https://twitter.com/#{user}/status/#{tweet_id})] #{tweet_text}",
+            'content' => "#{tweet_text}\n\n[[#{tweet_date.strftime('%I:%M %p')}](https://twitter.com/#{user}/status/#{tweet_id})]",
             'uuid' => generate_uuid_for_tweet(tweet_text),
             'datestamp' => tweet_date.utc.iso8601
           })
         else
           images.concat(tweet_images)
         end
-        oldest_id = tweet.elements['id_str'].text
+        oldest_id = tweet_id
       end
       if @twitter_config['save_images'] && images != []
         self.download_images(images)
       end
-      if tweets.length > 0
-        older_tweets = get_tweets(user, type, oldest_id)
-        tweets << older_tweets
+      sl = DayOne.new
+      tweets.each do |tweet|
+        sl.to_dayone(tweet)
       end
-      tweets
+      if tweets.length > 0 && $options[:archive]
+        older_tweets = get_tweets(user, type, oldest_id)
+      end
+      true
     end
 
   end
@@ -130,42 +134,13 @@ class TwitterLogger < Slogger
     @twitter_config['save_images'] ||= true
     @twitter_config['droplr_domain'] ||= 'd.pr'
 
-    sl = DayOne.new
-    @twitter_config['twitter_tags'] ||= ''
-    tags = "\n\n#{@twitter_config['twitter_tags']}\n" unless @twitter_config['twitter_tags'] == ''
-
-    tweets = []
     @twitter_config['twitter_users'].each do |user|
-      retries = 0
-      success = false
-      until success
-        tweets.concat get_tweets(user,'timeline')
-        if tweets
-          success = true
-        else
-          break if $options[:max_retries] == retries
-          retries += 1
-          @log.error("Error parsing Tweets for #{user}, retrying (#{retries}/#{$options[:max_retries]})")
-          sleep 2
-        end
-      end
-      retries = 0
-      success = false
-      until success
-        favs = get_tweets(user,'favorites')
-        if favs
-          tweets.concat favs
-          success = true
-        else
-          break if $options[:max_retries] == retries
-          retries += 1
-          @log.error("Error parsing Favorites for #{user}, retrying (#{retries}/#{$options[:max_retries]})")
-          sleep 2
-        end
-      end
-      tweets.each do |tweet|
-        sl.to_dayone(tweet)
-      end
+      with_retries {
+        get_tweets(user,'timeline')
+      }
+      with_retries {
+        get_tweets(user,'favorites')
+      }
     end
   end
 
@@ -185,7 +160,7 @@ class TwitterLogger < Slogger
       urls << curl.url
     end
     tweet_text.scan(/\((http:\/\/instagr\.am\/\w\/\w+?\/)\)/).each do |picurl|
-      final_url = self.get_body(picurl[0]).match(/http:\/\/distilleryimage.....[a-z]+.com[\W][a-z0-9_]+.jpg/)
+      final_url = self.get_body(picurl[0]).match(/http:\/\/distilleryimage.+\.com[\W][a-z0-9_]+\.jpg/)
       urls << final_url[0] if final_url
     end
     tweet_text.scan(/http:\/\/[\w\.]*yfrog\.com\/[\w]+/).each do |picurl|
@@ -195,13 +170,33 @@ class TwitterLogger < Slogger
       urls << curl.url
     end
     urls.compact.each do |url|
-      tweet_images << { 'content' => tweet_text, 'datestamp' => tweet_date.utc.iso8601, 'url' => url}
+      tweet_images << {
+        'content' => tweet_text,
+        'datestamp' => tweet_date.utc.iso8601,
+        'url' => url
+      }
     end
     tweet_images
   end
 
   def generate_uuid_for_tweet(text)
     Digest::SHA1.hexdigest(text)[0...32].upcase
+  end
+
+  def with_retries(&block)
+    retries = 0
+    success = false
+    returned = nil
+    until success
+      returned = yield
+      if returned
+        success = true
+      else
+        break if $options[:max_retries] == retries
+        retries += 1
+        sleep 2
+      end
+    end
   end
 
 end
