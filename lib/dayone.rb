@@ -9,6 +9,7 @@ class DayOne < Slogger
     datestamp = options['datestamp'] || options['date'] || Time.now.utc.iso8601
     entry = CGI.escapeHTML(content) unless content.nil?
     starred = options['starred'] || false
+    tags = options['tags'] || []
 
     @log.info("=====[ Saving entry to entries/#{uuid} ]")
     ext = ".doentry"

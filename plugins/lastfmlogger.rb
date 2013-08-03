@@ -79,15 +79,8 @@ class LastFMLogger < Slogger
       title_to_link = {}
 
       rss.items.each { |item|
-<<<<<<< HEAD
         break if Time.parse(item.pubDate.to_s) < today
         content += "* [#{item.title}](#{item.link})\n"
-||||||| merged common ancestors
-        break if Time.parse(item.pubDate.to_s) < today
-        title = String(item.title).e_link()
-        link = String(item.link).e_link()
-        content += "* [#{title}](#{link})\n"
-=======
         timestamp = Time.parse(item.pubDate.to_s)
         break if timestamp < today
         ts = config['lastfm_include_timestamps'] ? "[#{timestamp.strftime(@time_format)}] " : ""
@@ -103,7 +96,6 @@ class LastFMLogger < Slogger
         else
           songs_count[title] += 1
         end
->>>>>>> 26122ecd250233fb0d65db4d5f8964a4ecd6c035
       }
 
       # loop over each song and make final output as appropriate

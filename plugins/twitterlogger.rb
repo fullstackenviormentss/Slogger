@@ -52,7 +52,7 @@ class TwitterLogger < Slogger
 
   def download_images(images)
     images.each do |image|
-      options = {}
+      options = image
       options['content'] = image['content']
       options['uuid'] = generate_uuid_for_tweet(image['content'])
       next if options['content'].nil? || options['url'].nil?
@@ -73,70 +73,76 @@ class TwitterLogger < Slogger
       auth_config.oauth_token_secret = @twitter_config["oauth_token_secret"]
     end
 
-    case type
-    when 'favorites'
-      params = { "count" => 250, "screen_name" => user, "include_entities" => true }
-      tweet_obj = Twitter.favorites(params)
-    when 'timeline'
-      params = { "count" => 250, "screen_name" => user, "include_entities" => true, "exclude_replies" => @twitter_config['exclude_replies'], "include_rts" => @twitter_config['save_retweets']}
-      tweet_obj = Twitter.user_timeline(params)
+    begin
+      case type
+      when 'favorites'
+        params = { "count" => 250, "screen_name" => user, "include_entities" => true }
+        tweet_obj = Twitter.favorites(params)
+      when 'timeline'
+        params = {
+          "count" => 250,
+          "screen_name" => user,
+          "include_entities" => true,
+          "exclude_replies" => @twitter_config['exclude_replies'],
+          "include_rts" => @twitter_config['save_retweets'],
+        }
+        params["max_id"] = max_id if max_id
+        tweet_obj = Twitter.user_timeline(params)
+      end
+    rescue => e
+      warn e
+      return false
     end
 
+    puts "Got #{tweet_obj.length} tweets"
     images = []
     tweets = []
-    begin
-      tweet_obj.each do |tweet|
-        today = @timespan
-        tweet_date = tweet.created_at
-        break if tweet_date < today
-        tweet_text = tweet.text.gsub(/\n/,"\n\t")
-        if type == 'favorites'
-          # TODO: Prepend favorite's username/link
-          screen_name = tweet.user.status.user.screen_name
-          tweet_text = "[#{screen_name}](http://twitter.com/#{screen_name}): #{tweet_text}"
-          tweet_text = "☆  #{tweet_text}\n[#{screen_name}](http://twitter.com/#{screen_name})"
-        end
+    oldest_id = nil
+    tweet_obj.each do |tweet|
+      today = @timespan
+      tweet_date = tweet.created_at
+      tweet_text = tweet.text.gsub(/\n/,"\n\t")
+      if type == 'favorites'
+        # TODO: Prepend favorite's username/link
+        screen_name = tweet.user.status.user.screen_name
+        tweet_text = "☆  #{tweet_text}\n[#{screen_name}](http://twitter.com/#{screen_name})"
+      end
 
-        tweet_id = tweet.id
-        unless tweet.urls.empty?
-          tweet.urls.each { |url|
-            tweet_text.gsub!(/#{url.url}/,"[#{url.display_url}](#{url.expanded_url})")
+      tweet_id = tweet.id
+      if !tweet.urls.empty?
+        tweet.urls.each { |url| tweet_text.gsub!(/#{url.url}/,"[#{url.display_url}](#{url.expanded_url})") }
+      end
+      if @twitter_config['save_images']
+        tweet_images = []
+        unless tweet.media.empty?
+          tweet.media.each { |img|
+            tweet_images << { 'content' => tweet_text, 'date' => tweet_date.utc.iso8601, 'url' => img.media_url }
           }
         end
-        begin
-          if @twitter_config['save_images']
-            tweet_images = []
-            unless tweet.media.empty?
-              tweet.media.each { |img|
-                tweet_images << { 'content' => tweet_text, 'date' => tweet_date.utc.iso8601, 'url' => img.media_url }
-              }
-            end
-          end
-          tweet_images.concat parse_images_from_tweet(tweet_text, tweet_date)
-        end
-        if tweet_images.empty?
-          tweets.push({
-            'content' => "#{tweet_text}\n\n[[#{tweet_date.strftime('%I:%M %p')}](https://twitter.com/#{user}/status/#{tweet_id})]",
-            'uuid' => generate_uuid_for_tweet(tweet_text),
-              'datestamp' => tweet_date.utc.iso8601
-          })
-        else
-          images.concat(tweet_images)
-        end
-        oldest_id = tweet_id
       end
-      if @twitter_config['save_images'] && images != []
-        self.download_images(images)
+      tweet_images.concat parse_images_from_tweet(tweet_text, tweet_date)
+      if tweet_images.empty?
+        tweets.push({
+          'content' => "#{tweet_text}\n\n[[#{tweet_date.strftime('%I:%M %p')}](https://twitter.com/#{user}/status/#{tweet_id})]",
+          'uuid' => generate_uuid_for_tweet(tweet_text),
+          'datestamp' => tweet_date.utc.iso8601
+        })
+      else
+        images.concat(tweet_images)
       end
-      sl = DayOne.new
-      tweets.each do |tweet|
-        sl.to_dayone(tweet)
-      end
-      if tweets.length > 0 && $options[:archive]
-        older_tweets = get_tweets(user, type, oldest_id)
-      end
-      true
+      oldest_id = tweet_id
     end
+    if @twitter_config['save_images'] && images != []
+      self.download_images(images)
+    end
+    sl = DayOne.new
+    tweets.each do |tweet|
+      sl.to_dayone(tweet)
+    end
+    if tweets.length > 0 && $options[:archive]
+      older_tweets = get_tweets(user, type, oldest_id)
+    end
+    true
   end
 
   def do_log
@@ -211,7 +217,7 @@ class TwitterLogger < Slogger
       curl = RedirectFollower.new(burl).resolve
       urls << curl.url
     end
-    tweet_text.scan(/\((http:\/\/instagr\.am\/\w\/\w+?\/)\)/).each do |picurl|
+    tweet_text.scan(/\((http:\/\/instagram.com\/\w\/\w+?\/)\)/).each do |picurl|
       final_url = self.get_body(picurl[0]).match(/http:\/\/distilleryimage.+\.com[\W][a-z0-9_]+\.jpg/)
       urls << final_url[0] if final_url
     end
