@@ -1,21 +1,22 @@
 =begin
 Plugin: RSS Logger
+Version: 1.0
 Description: Logs any RSS feed as a digest and checks for new posts for the current day
 Author: [Brett Terpstra](http://brettterpstra.com)
 Configuration:
   feeds: [ "feed url 1" , "feed url 2", ... ]
-  tags: "@social @rss"
+  tags: "#social #rss"
 Notes:
   - rss_feeds is an array of feeds separated by commas, a single feed is fine, but it should be inside of brackets `[]`
-  - rss_tags are tags you want to add to every entry, e.g. "@social @rss"
+  - rss_tags are tags you want to add to every entry, e.g. "#social #rss"
 =end
 
 config = {
   'description' => ['Logs any RSS feed as a digest and checks for new posts for the current day',
                     'feeds is an array of feeds separated by commas, a single feed is fine, but it should be inside of brackets `[]`',
-                    'tags are tags you want to add to every entry, e.g. "@social @rss"'],
+                    'tags are tags you want to add to every entry, e.g. "#social #rss"'],
   'feeds' => [],
-  'tags' => '@social @rss'
+  'tags' => '#social #rss'
 }
 $slog.register_plugin({ 'class' => 'RSSLogger', 'config' => config })
 
@@ -87,7 +88,7 @@ class RSSLogger < Slogger
       rss = RSS::Parser.parse(rss_content, false)
       feed_items = []
       rss.items.each { |item|
-        item_date = Time.parse(item.date.to_s)
+        item_date = Time.parse(item.date.to_s) + Time.now.gmt_offset
         if item_date > today
           feed_items.push("* [#{item.title.gsub(/\n+/,' ').strip}](#{item.link})")
         else

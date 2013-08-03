@@ -27,13 +27,21 @@ Notes:
   - You should set facebook_ifttt_input_file to this value, substituting username appropriately.
 =end
 
+<<<<<<< HEAD
 config = {
+||||||| merged common ancestors
+config = { 
+=======
+require 'date'
+
+config = {
+>>>>>>> 26122ecd250233fb0d65db4d5f8964a4ecd6c035
   'description' => ['Parses Facebook posts logged by IFTTT.com',
                     'facebook_ifttt_input_file is a string pointing to the location of the file created by IFTTT.',
                     'The recipe at https://ifttt.com/recipes/56242 determines that location.'],
   'facebook_ifttt_input_file' => '',
   'facebook_ifttt_star' => false,
-  'facebook_ifttt_tags' => '@social @blogging'
+  'facebook_ifttt_tags' => '#social #blogging'
 }
 
 $slog.register_plugin({ 'class' => 'FacebookIFTTTLogger', 'config' => config })
@@ -69,14 +77,17 @@ class FacebookIFTTTLogger < Slogger
     last_run = @timespan
 
     ready = false
+    inpost = false
+    posttext = ""
+
     options = {}
     options['starred'] = config['facebook_ifttt_star']
-    options['uuid'] = %x{uuidgen}.gsub(/-/,'').strip
 
-    f = File.new(inputFile)
+    f = File.new(File.expand_path(inputFile))
     content = f.read
     f.close
 
+<<<<<<< HEAD
     content.each do |line|
        if line =~ regPost
            line = line.gsub(regPost, "")
@@ -108,11 +119,92 @@ class FacebookIFTTTLogger < Slogger
           ready = true
        end
       end
+||||||| merged common ancestors
+    if !content.empty?
+      content.each do |line|
+  			 if line =~ regPost
+  			   	line = line.gsub(regPost, "")
+  				  options['content'] = "#### FacebookIFTTT\n\n#{line}\n\n#{tags}"
+            ready = false
+  			 elsif line =~ regDate
+  		 	  line = line.strip
+  			  line = line.gsub(regDate, "")
+  			  line = line.gsub(" at ", ' ')
+  			  line = line.gsub(',', '')
 
+  			  month, day, year, time = line.split
+  			  hour,min = time.split(/:/)
+  			  min = min.gsub(ampm, '')
+
+  			  if line =~ pm
+  			  	x = hour.to_i
+  			  	x += 12
+  			  	hour = x.to_s
+  			  end
+
+  			  month = Date::MONTHNAMES.index(month)
+  			  ltime = Time.local(year, month, day, hour, min, 0, 0)
+  			  date = ltime.to_i
+
+  			  next unless date > last_run.to_i
+
+  			  options['datestamp'] = ltime.utc.iso8601
+          ready = true
+  		  end    	
+=======
+    if !content.empty?
+      each_selector = RUBY_VERSION < "1.9.2" ? :each : :each_line
+      content.send(each_selector) do | line|
+         if line =~ regDate
+          inpost = false
+          line = line.strip
+          line = line.gsub(regDate, "")
+          line = line.gsub(" at ", ' ')
+          line = line.gsub(',', '')
+
+          month, day, year, time = line.split
+          parseTime = DateTime.parse(time).strftime("%H:%M")
+          hour,min = parseTime.split(/:/)
+
+          month = Date::MONTHNAMES.index(month)
+          ltime = Time.local(year, month, day, hour, min, 0, 0)
+          date = ltime.to_i
+
+          if not date > last_run.to_i
+            posttext = ""
+            next
+          end
+
+          options['datestamp'] = ltime.utc.iso8601
+          ready = true
+  			 elsif line =~ regPost or inpost == true
+            inpost = true
+  			   	line = line.gsub(regPost, "")
+            posttext += line
+            ready = false
+  		  end
+>>>>>>> 26122ecd250233fb0d65db4d5f8964a4ecd6c035
+
+<<<<<<< HEAD
       if ready
         sl = DayOne.new
         sl.to_dayone(options)
         ready = false
+||||||| merged common ancestors
+        if ready
+          sl = DayOne.new
+          sl.to_dayone(options)
+          ready = false
+        end
+=======
+        if ready
+          sl = DayOne.new
+          options['content'] = "#### FacebookIFTTT\n\n#{posttext}\n\n#{tags}"
+          sl.to_dayone(options)
+          ready = false
+          posttext = ""
+        end
+>>>>>>> 26122ecd250233fb0d65db4d5f8964a4ecd6c035
       end
      end
   end

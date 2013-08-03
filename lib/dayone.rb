@@ -1,3 +1,5 @@
+require 'fileutils'
+
 class DayOne < Slogger
 
   def to_dayone(options = {})

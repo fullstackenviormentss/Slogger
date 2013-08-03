@@ -1,5 +1,6 @@
 =begin
 Plugin: GetGlue Logger
+Version: 1.0
 Description: Brief description (one line)
 Author: [Dom Barnes](http://dombarnes.com)
 Configuration:
@@ -14,7 +15,7 @@ config = {
                     'You will need the RSS feed of your Activity stream.'],
   'getglue_username' => 'getglue',
   'getglue_feed' => "",
-  'tags' => '@social @entertainment'
+  'tags' => '#social #entertainment'
 }
 
 $slog.register_plugin({ 'class' => 'GetglueLogger', 'config' => config })
@@ -64,17 +65,21 @@ class GetglueLogger < Slogger
     rss = RSS::Parser.parse(rss_content, false)
     rss.items.each { |item|
       break if Time.parse(item.pubDate.to_s) < @timespan
-      content += "* [#{item.pubDate.strftime('%H:%M %p')}](#{item.link}) - #{item.title}\n"
+      if item.description !=""
+        content += "* [#{item.pubDate.strftime(@time_format)}](#{item.link}) - #{item.title} \"#{item.description}\"\n"
+      else
+        content += "* [#{item.pubDate.strftime(@time_format)}](#{item.link}) - #{item.title}\n"
+      end
     }
     if content != ''
-      entrytext = "## GetGlue Checkins for #{@timespan.strftime('%m-%d-%Y')}\n\n" + content + "\n#{@tags}"
+      entrytext = "## GetGlue Checkins for #{@timespan.strftime(@date_format)}\n\n" + content + "\n#{@tags}"
     end
 
     # create an options array to pass to 'to_dayone'
     # all options have default fallbacks, so you only need to create the options you want to specify
     if content != ''
       options = {}
-      options['content'] = "## GetGlue Activity for #{@timespan.strftime('%m-%d-%Y')}\n\n#{content} #{tags}"
+      options['content'] = "## GetGlue Activity for #{@timespan.strftime(@date_format)}\n\n#{content} #{tags}"
       options['datestamp'] = @timespan.utc.iso8601
       options['uuid'] = %x{uuidgen}.gsub(/-/,'').strip
 

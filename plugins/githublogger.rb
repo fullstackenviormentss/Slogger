@@ -1,10 +1,11 @@
 =begin
 Plugin: Github Logger
+Version: 1.1
 Description: Logs daily Github activity for the specified user
 Author: [Brett Terpstra](http://brettterpstra.com)
 Configuration:
   github_user: githubuser
-  github_tags: "@social @coding"
+  github_tags: "#social #coding"
 Notes:
 
 =end
@@ -12,7 +13,7 @@ Notes:
 config = {
   'description' => ['Logs daily Github activity for the specified user','github_user should be your Github username'],
   'github_user' => '',
-  'github_tags' => '@social @coding',
+  'github_tags' => '#social #coding',
 }
 $slog.register_plugin({ 'class' => 'GithubLogger', 'config' => config })
 
@@ -57,6 +58,9 @@ class GithubLogger < Slogger
       if date > @timespan
         case action['type']
           when "PushEvent"
+            if !action["repository"]
+              action['repository'] = {"name" => "unknown repository"}
+            end
             output += "* Pushed to branch *#{action['payload']['ref'].gsub(/refs\/heads\//,'')}* of [#{action['repository']['name']}](#{action['url']})\n"
             action['payload']['shas'].each do |sha|
               output += "    * #{sha[2].gsub(/\n+/," ")}\n" unless sha.length < 3
@@ -69,14 +73,14 @@ class GithubLogger < Slogger
               output += "* Started watching [#{action['repository']['owner']}/#{action['repository']['name']}](#{action['repository']['url']})\n"
               output += "    * #{action['repository']['description'].gsub(/\n/," ")}\n" unless action['repository']['description'].nil?
             end
-          end
+        end
       else
         break
       end
     }
 
     return false if output.strip == ""
-    entry = "## Github activity for #{Time.now.strftime("%m-%d-%Y")}:\n\n#{output}\n#{config['github_tags']}"
+    entry = "## Github activity for #{Time.now.strftime(@date_format)}:\n\n#{output}\n#{config['github_tags']}"
     DayOne.new.to_dayone({ 'content' => entry })
   end
 

@@ -1,5 +1,6 @@
 =begin
 Plugin: Flickr Logger
+Version: 1.0
 Description: Logs today's photos from Flickr.
 Notes:
   Get your Flickr ID at <http://idgettr.com/>
@@ -8,7 +9,7 @@ Author: [Brett Terpstra](http://brettterpstra.com)
 Configuration:
   flickr_api_key: 'XXXXXXXXXXXXXXXXXXXXXXXXX'
   flickr_ids: [flickr_id1[, flickr_id2...]]
-  flickr_tags: "@social @photo"
+  flickr_tags: "#social #photo"
 Notes:
 
 =end
@@ -16,13 +17,13 @@ config = {
   'flickr_description' => [
     'Logs today\'s photos from Flickr.',
     'flickr_ids is an array of one or more IDs',
-    'flickr_datetype can be the "upload" or "taken" date that has tpo be used',
+    'flickr_datetype can be the "upload" or "taken" date to be used',
     'Get your Flickr ID at <http://idgettr.com/>',
     'Get your Flickr API key at <http://www.flickr.com/services/apps/create/noncommercial/>'],
   'flickr_api_key' => '',
   'flickr_ids' => [],
   'flickr_datetype' => 'upload',
-  'flickr_tags' => '@social @photo'
+  'flickr_tags' => '#social #photo'
 }
 $slog.register_plugin({ 'class' => 'FlickrLogger', 'config' => config })
 
@@ -61,7 +62,7 @@ class FlickrLogger < Slogger
 
     sl = DayOne.new
     config['flickr_tags'] ||= ''
-    tags = "\n\n#{config['flickr_tags']}\n" unless config['flickr_tags'] == ''
+    tags = config['flickr_tags'] == '' ? '' : "\n\n#{config['flickr_tags']}\n"
     today = @timespan.to_i
 
     @log.info("Getting Flickr images for #{config['flickr_ids'].join(', ')}")
@@ -89,6 +90,7 @@ class FlickrLogger < Slogger
               url = photo.attributes["url_m"]
               content = "## " + photo.attributes['title']
               content += "\n\n" + photo.attributes['content'] unless photo.attributes['content'].nil?
+              content += tags
               images << { 'content' => content, 'date' => image_date, 'url' => url }
             }
         }

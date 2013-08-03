@@ -1,5 +1,13 @@
 #!/usr/bin/env ruby
-
+#    __  _
+#   / _\| | ___   __ _  __ _  ___ _ __
+#   \ \ | |/ _ \ / _` |/ _` |/ _ \ '__|
+#   _\ \| | (_) | (_| | (_| |  __/ |
+#   \__/|_|\___/ \__, |\__, |\___|_|
+#                |___/ |___/
+#        Copyright 2012, Brett Terpstra
+#              http://brettterpstra.com
+#                  --------------------
 require 'open-uri'
 require 'net/http'
 require 'net/https'
@@ -10,13 +18,15 @@ require 'erb'
 require 'logger'
 require 'optparse'
 require 'fileutils'
+require 'rexml/parsers/pullparser'
+require 'rubygems'
 
 SLOGGER_HOME = File.dirname(File.expand_path(__FILE__))
 ENV['SLOGGER_HOME'] = SLOGGER_HOME
 
 require SLOGGER_HOME + '/lib/sociallogger'
 require SLOGGER_HOME + '/lib/configtools'
-require SLOGGER_HOME + '/lib/json'
+# require SLOGGER_HOME + '/lib/json'
 
 class String
   def markdownify
@@ -34,10 +44,83 @@ class String
     contents
   end
 
+  # convert (multi)Markdown to HTML
+  def to_html
+    md = SLOGGER_HOME + '/lib/multimarkdown'
+    return %x{echo #{self.e_sh}|"#{md}"}
+  end
+
+  # shell escape for passing content to external commands
+  # e.g. %x{echo content.e_sh|sort}
   def e_sh
     self.to_s.gsub(/(?=[^a-zA-Z0-9_.\/\-\n])/, '\\').gsub(/\n/, "'\n'").sub(/^$/, "''")
   end
 
+  def e_link
+    self.to_s.gsub(/([\[\]\(\)])/, '\\\\\1')
+  end
+
+  # escape text for use in a quoted AppleScript string
+  #
+  # string = %q{"This is a quoted string and it's awfully nice!"}
+  # res = %x{osascript <<'APPLESCRIPT'
+  #   return "hello, #{string.e_as}"
+  # APPLESCRIPT}
+  def e_as(str)
+    str.to_s.gsub(/(?=["\\])/, '\\')
+  end
+
+  def truncate_html(len = 30)
+    p = REXML::Parsers::PullParser.new(self)
+    tags = []
+    new_len = len
+    results = ''
+    while p.has_next? && new_len > 0
+      p_e = p.pull
+      case p_e.event_type
+      when :start_element
+        tags.push p_e[0]
+        results << "<#{tags.last} #{attrs_to_s(p_e[1])}>"
+      when :end_element
+        results << "</#{tags.pop}>"
+      when :text
+        results << p_e[0].first(new_len)
+        new_len -= p_e[0].length
+      else
+        results << "<!-- #{p_e.inspect} -->"
+      end
+    end
+    tags.reverse.each do |tag|
+      results << "</#{tag}>"
+    end
+    results
+  end
+
+  private
+
+  def attrs_to_s(attrs)
+    if attrs.empty?
+      ''
+    else
+      attrs.to_a.map { |attr| %{#{attr[0]}="#{attr[1]}"} }.join(' ')
+    end
+  end
+end
+
+class SloggerUtils
+  def get_stdin(message)
+    print message + " "
+    STDIN.gets.chomp
+  end
+
+  def ask(message, valid_options = nil)
+    if valid_options
+      answer = get_stdin("#{message} #{valid_options.to_s.gsub(/"/, '').gsub(/, /,'/')} ") while !valid_options.include?(answer)
+    else
+      answer = get_stdin(message)
+    end
+    answer
+  end
 end
 
 class Slogger
@@ -84,6 +167,9 @@ class Slogger
     @config['image_filename_is_title'] ||= false
     @dayonepath = self.storage_path
     @template = self.template
+    @date_format = @config['date_format'] || '%F'
+    @time_format = @config['time_format'] || '%R'
+    @datetime_format = "#{@date_format} #{@time_format}"
   end
 
   def undo_slogger(count = 1)
@@ -165,8 +251,15 @@ class Slogger
         end
         @config[_namespace][_namespace+"_last_run"] = Time.now.strftime('%c')
       end
-      # ConfigTools.new.dump_config(@config)
-      eval(plugin['class']).new.do_log
+      unless $options[:config_only]
+        # credit to Hilton Lipschitz (@hiltmon)
+        updated_config = eval(plugin['class']).new.do_log
+        if updated_config && updated_config.class.to_s == 'Hash'
+            updated_config.each { |k,v|
+              @config[_namespace][k] = v
+            }
+        end
+      end
     end
     ConfigTools.new({'config_file' => $options[:config_file]}).dump_config(@config)
   end
@@ -190,6 +283,10 @@ class Slogger
   <string><%= entry %></string>
   <key>Starred</key>
   <<%= starred %>/>
+  <% if tags %><key>Tags</key>
+  <array>
+  <% tags.each do |tag| %>  <string><%= tag %></string>
+  <% end %></array><% end %>
   <key>UUID</key>
   <string><%= uuid %></string>
 </dict>
@@ -200,6 +297,7 @@ XMLTEMPLATE
 Title: Journal entry for <%= datestamp %>
 Date: <%= datestamp %>
 Starred: <%= starred %>
+<% if tags %>Tags: <% tags.join(", ") %>  <% end %>
 
 <%= entry %>
 
@@ -215,6 +313,9 @@ $options = {}
 optparse = OptionParser.new do|opts|
   opts.banner = "Usage: slogger [-dq] [-r X] [/path/to/image.jpg]"
   $options[:config_file] = File.expand_path(File.dirname(__FILE__)+'/slogger_config')
+  opts.on('--update-config', 'Create or update a configuration file') do
+    $options[:config_only] = true
+  end
   opts.on( '-c', '--config FILE', 'Specify configuration file to use') do |file|
     file = File.expand_path(file)
     $options[:config_file] = file
@@ -235,7 +336,7 @@ optparse = OptionParser.new do|opts|
   opts.on( '-q','--quiet', 'Run quietly (no notifications/messages)' ) do
    $options[:quiet] = true
   end
-  $options[:max_retries] = 1
+  $options[:max_retries] = 3
   opts.on( '-r','--retries COUNT', 'Maximum number of retries per plugin (int)' ) do |count|
     $options[:max_retries] = count.to_i
   end
